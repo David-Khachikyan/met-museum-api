@@ -1,0 +1,62 @@
+version: '3.9'
+services:
+  composer:
+    build:
+      context: .
+      dockerfile: docker/${APP_ENV}/composer.Dockerfile
+      args:
+        - UID=${UID}
+        - GID=${GID}
+    user: ${UID}
+    command: /bin/sh -c "composer install --no-interaction && composer dump-autoload && php artisan migrate && php artisan migrate:fresh --env=testing"
+    container_name: composer
+    working_dir: /var/www
+    volumes:
+      - ./src:/var/www
+      - ./docker/${APP_ENV}/php/conf.d/docker-php-ext-xdebug.ini:/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+      - ./docker/${APP_ENV}/php/conf.d/docker-php-memory.ini:/usr/local/etc/php/conf.d/docker-php-memory.ini
+      - ./docker/${APP_ENV}/php/conf.d/php.ini:/usr/local/etc/php/php.ini
+    networks:
+      - app
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    volumes:
+      - ./src:/var/www
+      - ./docker/${APP_ENV}/nginx:/etc/nginx/conf.d
+      - /var/log/nginx:/var/log/nginx
+      - /var/certs:/var/certs
+      - /opt/ssl2024:/var/certs/ssl
+    ports:
+      - "${HTTP_PORT}:80"
+      - "${HTTPS_PORT}:443"
+    depends_on:
+      - app
+    networks:
+      - app
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/${APP_ENV}/app.Dockerfile
+      args:
+        - UID=${UID}
+        - GID=${GID}
+    user: ${UID}
+    working_dir: /var/www
+    container_name: application
+    command: php-fpm
+    volumes:
+      - ./src:/var/www
+      - ./docker/${APP_ENV}/php/conf.d/docker-php-ext-xdebug.ini:/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+      - ./docker/${APP_ENV}/php/conf.d/docker-php-memory.ini:/usr/local/etc/php/conf.d/docker-php-memory.ini
+      - ./docker/${APP_ENV}/php-fpm/zzz-docker.conf:/usr/local/etc/php-fpm.d/zzz-docker.conf
+      - ./docker/${APP_ENV}/php/conf.d/php.ini:/usr/local/etc/php/php.ini
+      - ./docker/keys:/var/keys
+    networks:
+      - app
+
+networks:
+  app:
+    driver: bridge
